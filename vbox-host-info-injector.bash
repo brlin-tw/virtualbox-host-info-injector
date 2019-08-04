@@ -490,7 +490,7 @@ process_commandline_arguments() {
                 ;;
                 --help \
                 |-h)
-                    print_help;
+                    print_help
                     exit 0
                 ;;
                 *)
