@@ -66,6 +66,7 @@ fi; unset runtime_dependency_checking_result
 ## This function is called near the end of the file
 ## with the script's command-line parameters as arguments
 init(){
+    # firmware_type: [bios|uefi]
     local \
         vm_name \
         firmware_type
