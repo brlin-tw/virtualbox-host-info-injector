@@ -67,12 +67,15 @@ fi; unset runtime_dependency_checking_result
 ## with the script's command-line parameters as arguments
 init(){
     # firmware_type: [bios|uefi]
+    # operating_mode: [set|clear]
     local \
         vm_name \
-        firmware_type
+        firmware_type \
+        operating_mode=set
     
     if ! process_commandline_arguments \
             vm_name \
+            operating_mode \
             "${@}"; then
         printf -- \
             'Error: Invalid command-line arguments\n' \
@@ -115,14 +118,29 @@ init(){
         ;;
     esac
 
-    fetch_and_inject_data_to_vm \
-        "${firmware_type}"
-
+    case "${operating_mode}" in
+        clear)
+            clear_data_in_vm \
+                "${vm_name}"
+        ;;
+        set)
+            fetch_and_inject_data_to_vm \
+                "${vm_name}" \
+                "${firmware_type}"
+        ;;
+        *)
+            printf -- \
+                'BUG: Invalid operating mode.\n' \
+                1>&2
+            exit 1
+        ;;
+    esac
     exit 0
 }; declare -fr init
 
 fetch_and_inject_data_to_vm(){
-    local firmware_type="${1}"
+    local vm_name="${1}"; shift 1
+    local firmware_type="${1}"; shift 1
 
     local vbox_firmware_type
 
@@ -445,6 +463,58 @@ fetch_and_inject_data_to_vm(){
     )
 }
 
+clear_data_in_vm(){
+    local vm_name="${1}"; shift 1
+
+    local vbox_firmware_type
+    local vbox_machine_configuration
+
+    for vbox_firmware_type in \
+        pcbios \
+        efi; do
+        for vbox_machine_configuration in \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBIOSVendor \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBIOSVersion \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBIOSReleaseDate \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBIOSReleaseMajor \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBIOSReleaseMinor \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBIOSFirmwareMajor \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBIOSFirmwareMinor \
+            \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiSystemVendor \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiSystemProduct \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiSystemVersion \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiSystemSerial \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiSystemSKU \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiSystemFamily \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiSystemUuid \
+            \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBoardVendor \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBoardProduct \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBoardVersion \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBoardSerial \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBoardAssetTag \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBoardLocInChass \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiBoardBoardType \
+            \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiChassisVendor \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiChassisType \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiChassisVersion \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiChassisSerial \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiChassisAssetTag \
+            \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiProcManufacturer \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiProcVersion \
+            \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiOEMVBoxVer \
+            VBoxInternal/Devices/"${vbox_firmware_type}"/0/Config/DmiOEMVBoxRev; do
+            VBoxManage setextradata \
+                "${vm_name}" \
+                "${vbox_machine_configuration}"
+        done
+    done
+}
+
 print_help(){
     # Backticks in help message is Markdown's <code> markup
     # shellcheck disable=SC2016
@@ -456,6 +526,9 @@ print_help(){
             "${RUNTIME_COMMANDLINE_BASECOMMAND}"
 
         printf '## COMMAND-LINE OPTIONS ##\n'
+        printf '### `-c` / `--clear` ###\n'
+        printf 'Clear previous configurations.\n\n'
+
         printf '### `-d` / `--debug` ###\n'
         printf 'Enable script debugging\n\n'
 
@@ -467,6 +540,7 @@ print_help(){
 
 process_commandline_arguments() {
     local -n vm_name_ref="${1}"; shift 1
+    local -n operating_mode_ref="${1}"; shift 1
 
     # Modifyable parameters for parsing by consuming
     local -a parameters=("${@}")
@@ -485,6 +559,12 @@ process_commandline_arguments() {
             break
         else
             case "${parameters[0]}" in
+                -c \
+                |--clear)
+                    # name references are use indirectly
+                    # shellcheck disable=SC2034
+                    operating_mode_ref=clear
+                ;;
                 --debug \
                 |-d)
                     enable_debug=true
