@@ -66,24 +66,31 @@ fi; unset runtime_dependency_checking_result
 ## This function is called near the end of the file
 ## with the script's command-line parameters as arguments
 init(){
+    local script_command="${1}"; shift 1
+    local -a script_args=("${@}")
+
+    local flag_print_help=false
+
     local \
         vm_name \
         firmware_type
     
     if ! process_commandline_arguments \
             vm_name \
-            "${@}"; then
+            flag_print_help \
+            "${script_args[@]}"; then
         printf -- \
             'Error: Invalid command-line arguments\n' \
             1>&2
 
         printf '\n' # separate error message and help message
-        print_help
+        print_help "${script_command}"
         exit 1
     fi
 
-    if ! test -v vm_name; then
-        print_help
+    if test "${flag_print_help}" = true \
+        || ! test -v vm_name; then
+        print_help "${script_command}"
         exit 0
     fi
 
@@ -445,14 +452,16 @@ fetch_and_inject_data_to_vm(){
 }
 
 print_help(){
+    local basecommand="${1}"
+
     # Backticks in help message is Markdown's <code> markup
     # shellcheck disable=SC2016
     {
         printf '# Help Information for %s #\n' \
-            "${RUNTIME_COMMANDLINE_BASECOMMAND}"
+            "${basecommand}"
         printf '## SYNOPSIS ##\n'
         printf '* `"%s" _command-line_options_ _vm_name_`\n\n' \
-            "${RUNTIME_COMMANDLINE_BASECOMMAND}"
+            "${basecommand}"
 
         printf '## COMMAND-LINE OPTIONS ##\n'
         printf '### `-d` / `--debug` ###\n'
@@ -466,6 +475,7 @@ print_help(){
 
 process_commandline_arguments() {
     local -n vm_name_ref="${1}"; shift 1
+    local -n flag_print_help_ref="${1}"; shift 1
 
     # Modifyable parameters for parsing by consuming
     local -a parameters=("${@}")
@@ -490,8 +500,7 @@ process_commandline_arguments() {
                 ;;
                 --help \
                 |-h)
-                    print_help;
-                    exit 0
+                    flag_print_help_ref=true
                 ;;
                 *)
                     if test "${flag_vm_name_specified}" = true; then
@@ -568,7 +577,7 @@ trap_interrupt(){
 }; declare -fr trap_interrupt; trap trap_interrupt INT
 
 if test "${#}" -eq 0; then
-    init
+    init "${0}"
 else
-    init "${@}"
+    init "${0}" "${@}"
 fi
